@@ -1,12 +1,25 @@
-extern crate termion;
 use std::ops::{Index, IndexMut, Range};
 
-#[derive(Copy, Clone, Debug, Hash, std::cmp::Eq)]
-pub struct Colour {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-    pub default: bool,
+#[derive(Copy, Clone, Debug, Hash, std::cmp::PartialEq)]
+pub enum Colour {
+    Rgb { r: u8, g: u8, b: u8 },
+    Black,
+    Blue,
+    Cyan,
+    Green,
+    LightBlack,
+    LightBlue,
+    LightGreen,
+    LightMagenta,
+    LightRed,
+    LightWhite,
+    LightYellow,
+    Magenta,
+    Red,
+    White,
+    Yellow,
+    Default,
+    None,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -16,9 +29,17 @@ pub struct FmtChar {
     pub bg: Colour,
 }
 
+impl FmtChar {
+    pub fn width(&self) -> u16 {
+        1
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct FmtString {
     container: Vec<FmtChar>,
+    dirty: bool,
+    cache: String,
 }
 
 pub enum Ground {
@@ -35,39 +56,46 @@ impl Index<Range<usize>> for FmtString {
 
 impl Colour {
     pub fn from_rgb(r: u8, g: u8, b: u8) -> Self {
-        Self {
-            r,
-            g,
-            b,
-            default: false,
-        }
+        Self::Rgb { r, g, b }
     }
     pub fn default() -> Self {
-        Self {
-            r: 0,
-            g: 0,
-            b: 0,
-            default: true,
-        }
+        Self::Default
     }
 
+    #[rustfmt::skip]
     pub fn to_string(&self, ground: Ground) -> String {
-        if self.default {
-            match ground {
-                Ground::Foreground => termion::color::Reset.fg_str().to_owned(),
-                Ground::Background => termion::color::Reset.bg_str().to_owned(),
-            }
-        } else {
-            match ground {
-                Ground::Foreground => termion::color::Rgb(self.r, self.g, self.b).fg_string(),
-                Ground::Background => termion::color::Rgb(self.r, self.g, self.b).bg_string(),
-            }
+        // if self.default {
+        //     match ground {
+        //         Ground::Foreground => termion::color::Reset.fg_str().to_owned(),
+        //         Ground::Background => termion::color::Reset.bg_str().to_owned(),
+        //     }
+        // } else {
+        //     match ground {
+        //         Ground::Foreground => termion::color::Rgb(self.r, self.g, self.b).fg_string(),
+        //         Ground::Background => termion::color::Rgb(self.r, self.g, self.b).bg_string(),
+        //     }
+        // }
+        let bg = match ground { Ground::Foreground => false, Ground::Background => true };
+        match self {
+            Self::Rgb { r, g, b } => if bg { termion::color::Rgb(*r, *g, *b).bg_string() } else { termion::color::Rgb(*r, *g, *b).fg_string() },
+            Self::Black         => if bg { termion::color::Black.bg_str().into()        } else { termion::color::Black.fg_str().into() },
+            Self::Blue          => if bg { termion::color::Blue.bg_str().into()         } else { termion::color::Blue.fg_str().into() },
+            Self::Cyan          => if bg { termion::color::Cyan.bg_str().into()         } else { termion::color::Cyan.fg_str().into() },
+            Self::Green         => if bg { termion::color::Green.bg_str().into()        } else { termion::color::Green.fg_str().into() },
+            Self::LightBlack    => if bg { termion::color::LightBlack.bg_str().into()   } else { termion::color::LightBlack.fg_str().into() },
+            Self::LightBlue     => if bg { termion::color::LightBlue.bg_str().into()    } else { termion::color::LightBlue.fg_str().into() },
+            Self::LightGreen    => if bg { termion::color::LightGreen.bg_str().into()   } else { termion::color::LightGreen.fg_str().into() },
+            Self::LightMagenta  => if bg { termion::color::LightMagenta.bg_str().into() } else { termion::color::LightMagenta.fg_str().into() },
+            Self::LightRed      => if bg { termion::color::LightRed.bg_str().into()     } else { termion::color::LightRed.fg_str().into() },
+            Self::LightWhite    => if bg { termion::color::LightWhite.bg_str().into()   } else { termion::color::LightWhite.fg_str().into() },
+            Self::LightYellow   => if bg { termion::color::LightYellow.bg_str().into()  } else { termion::color::LightYellow.fg_str().into() },
+            Self::Magenta       => if bg { termion::color::Magenta.bg_str().into()      } else { termion::color::Magenta.fg_str().into() },
+            Self::Red           => if bg { termion::color::Red.bg_str().into()          } else { termion::color::Red.fg_str().into() },
+            Self::Default       => if bg { termion::color::Reset.bg_str().into()        } else { termion::color::Reset.fg_str().into() },
+            Self::White         => if bg { termion::color::White.bg_str().into()        } else { termion::color::White.fg_str().into() },
+            Self::Yellow        => if bg { termion::color::Yellow.bg_str().into()       } else { termion::color::Yellow.fg_str().into() },
+            Self::None => "".into(),
         }
-    }
-}
-impl std::cmp::PartialEq for Colour {
-    fn eq(&self, other: &Self) -> bool {
-        self.r == other.r && self.g == other.g && self.b == other.b && self.default == other.default
     }
 }
 
@@ -80,7 +108,55 @@ impl Index<usize> for FmtString {
 
 impl IndexMut<usize> for FmtString {
     fn index_mut(&mut self, idx: usize) -> &mut FmtChar {
+        self.dirty = true; // could be modifying it
         &mut self.container[idx]
+    }
+}
+
+impl From<String> for FmtString {
+    fn from(item: String) -> Self {
+        FmtString::from_str(&item)
+    }
+}
+
+impl From<Vec<FmtChar>> for FmtString {
+    fn from(item: Vec<FmtChar>) -> Self {
+        Self {
+            container: item,
+            dirty: true,
+            cache: "".into(),
+        }
+    }
+}
+
+impl From<&[FmtChar]> for FmtString {
+    fn from(item: &[FmtChar]) -> Self {
+        Self {
+            container: item.to_vec(),
+            dirty: true,
+            cache: "".into(),
+        }
+    }
+}
+
+impl From<FmtString> for String {
+    fn from(mut item: FmtString) -> String {
+        if item.dirty {
+            item.rebuild_cache();
+        }
+        item.cache
+    }
+}
+
+impl std::fmt::Display for FmtChar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}{}{}",
+            self.fg.to_string(Ground::Foreground),
+            self.bg.to_string(Ground::Background),
+            self.ch
+        )
     }
 }
 
@@ -103,13 +179,44 @@ impl FmtString {
         Self::from_str_colour(data, Colour::default(), Colour::default())
     }
 
+    pub fn new() -> Self {
+        Self {
+            container: Vec::new(),
+            dirty: true,
+            cache: "".into(),
+        }
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            container: Vec::with_capacity(capacity),
+            dirty: true,
+            cache: "".into(),
+        }
+    }
+
+    pub fn push(&mut self, c: FmtChar) {
+        self.container.push(c);
+    }
+
     pub fn from_str_colour(data: &str, fg: Colour, bg: Colour) -> Self {
         let mut buf: Vec<FmtChar> = Vec::with_capacity(data.len());
         for ch in data.chars() {
             buf.push(FmtChar { ch, fg, bg });
         }
 
-        Self { container: buf }
+        Self {
+            container: buf,
+            dirty: true,
+            cache: "".into(),
+        }
+    }
+
+    pub fn to_str<'a>(&'a mut self) -> &'a str {
+        if self.dirty {
+            self.rebuild_cache();
+        }
+        &self.cache
     }
 
     pub fn from_ansi_string(data: String) -> FmtString {
@@ -164,13 +271,17 @@ impl FmtString {
             } else {
                 out.push(FmtChar {
                     ch: data[pos],
-                    fg: fg,
-                    bg: bg,
+                    fg,
+                    bg,
                 });
                 pos += 1;
             }
         }
-        FmtString { container: out }
+        FmtString {
+            container: out,
+            dirty: true,
+            cache: "".into(),
+        }
     }
 
     pub fn to_optimised_string(&self) -> String {
@@ -190,6 +301,21 @@ impl FmtString {
             out.push(ch.ch);
         }
         out
+    }
+
+    fn rebuild_cache(&mut self) {
+        if self.dirty {
+            self.cache = self.to_optimised_string();
+            self.dirty = false;
+        }
+    }
+    pub fn concat(mut a: FmtString, b: FmtString) -> FmtString {
+        a.container.extend(b.container.iter());
+        a.dirty = true;
+        a
+    }
+    pub fn len(&self) -> usize {
+        self.container.len()
     }
 }
 
