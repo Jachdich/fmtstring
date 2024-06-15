@@ -1,3 +1,4 @@
+use oklab::Oklab;
 use std::ops::{Index, IndexMut, Range};
 
 #[derive(Copy, Clone, Debug, Hash, std::cmp::PartialEq)]
@@ -96,6 +97,15 @@ impl Colour {
             Self::Yellow        => if bg { termion::color::Yellow.bg_str().into()       } else { termion::color::Yellow.fg_str().into() },
             Self::None => "".into(),
         }
+    }
+}
+
+impl From<Colour> for Oklab {
+    fn from(a: Colour) -> Self {
+        let Colour::Rgb { r, g, b } = a else {
+            unreachable!()
+        };
+        oklab::srgb_to_oklab(oklab::RGB::<u8>::new(r, g, b))
     }
 }
 
