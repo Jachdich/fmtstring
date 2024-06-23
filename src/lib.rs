@@ -55,6 +55,33 @@ impl Index<Range<usize>> for FmtString {
     }
 }
 
+impl IntoIterator for FmtString {
+    type Item = FmtChar;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.container.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a FmtString {
+    type Item = &'a FmtChar;
+    type IntoIter = std::slice::Iter<'a, FmtChar>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        (&self.container).iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut FmtString {
+    type Item = &'a mut FmtChar;
+    type IntoIter = std::slice::IterMut<'a, FmtChar>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        (&mut self.container).iter_mut()
+    }
+}
+
 impl Colour {
     pub fn from_rgb(r: u8, g: u8, b: u8) -> Self {
         Self::Rgb { r, g, b }
